@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เว็บเช็คสถานะเครื่องจักร</title>
+<style>
+  :root{
+    --bg:#12161c;
+    --panel:#1a2029;
+    --panel-2:#212832;
+    --text:#eef1f4;
+    --text-sub:#8b96a3;
+    --line:#2a323d;
+    --amber:#f2a93b;
+    --amber-dim:#8a6323;
+    --blue:#5b8fd6;
+    --green:#59b37e;
+    --red:#e2685f;
+  }
+  :root:not([data-theme="dark"]){
+    /* deck is intentionally dark-only, control-room aesthetic */
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,"Noto Sans Thai",Helvetica,Arial,sans-serif;
+    overflow:hidden;
+  }
+  .mono{font-family:'Consolas','SFMono-Regular',ui-monospace,Menlo,monospace;}
+
+  .deck{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    overflow:hidden;
+  }
+  .slide{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:6vh 9vw;
+    opacity:0;
+    transform:translateX(24px);
+    pointer-events:none;
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  .slide.active{
+    opacity:1;
+    transform:translateX(0);
+    pointer-events:auto;
+  }
+
+  .kicker{
+    color:var(--amber);
+    font-size:0.78rem;
+    letter-spacing:0.02em;
+    margin-bottom:14px;
+  }
+  h1{
+    font-size:clamp(2rem,4.4vw,3.2rem);
+    line-height:1.15;
+    margin:0 0 18px;
+    font-weight:700;
+    max-width:14ch;
+  }
+  h2{
+    font-size:clamp(1.5rem,3vw,2.2rem);
+    margin:0 0 22px;
+    font-weight:700;
+    max-width:20ch;
+  }
+  p.lead{
+    color:var(--text-sub);
+    font-size:1.05rem;
+    max-width:56ch;
+    line-height:1.65;
+    margin:0 0 8px;
+  }
+
+  /* Title slide */
+  .title-slide .readout{
+    margin-top:40px;
+    display:flex;
+    gap:28px;
+    flex-wrap:wrap;
+  }
+  .readout .box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 18px;
+    min-width:140px;
+  }
+  .readout .box .val{font-size:1.4rem;font-weight:700;}
+  .readout .box.running .val{color:var(--green);}
+  .readout .box .lab{color:var(--text-sub);font-size:0.75rem;margin-top:3px;}
+
+  /* generic two-col */
+  .cols{
+    display:flex;
+    gap:60px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .col{flex:1;min-width:280px;}
+
+  .feature-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px;max-width:44ch;}
+  .feature-list li{
+    color:var(--text);
+    font-size:1rem;
+    line-height:1.5;
+    padding-left:0;
+    display:flex;
+    gap:12px;
+  }
+  .feature-list li .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--blue);
+    margin-top:9px;flex-shrink:0;
+  }
+  .feature-list li b{font-weight:700;}
+  .feature-list li span.sub{color:var(--text-sub);}
+
+  /* mock dashboard preview */
+  .mock{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:18px;
+    width:100%;
+    max-width:420px;
+  }
+  .mock .mtitle{font-size:0.75rem;color:var(--text-sub);margin-bottom:12px;}
+  .mock .mrow{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 0;border-top:1px solid var(--line);
+  }
+  .mock .mrow:first-of-type{border-top:none;}
+  .mock .mname{font-size:0.92rem;}
+  .mock .mstatus{font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:999px;}
+  .mock .mstatus.on{background:rgba(89,179,126,0.15);color:var(--green);}
+  .mock .mstatus.warn{background:rgba(242,169,59,0.15);color:var(--amber);}
+  .mock .mstatus.err{background:rgba(226,104,95,0.15);color:var(--red);}
+  .mock .mstatus.off{background:rgba(139,150,163,0.15);color:var(--text-sub);}
+
+  .stack{display:flex;flex-direction:column;gap:10px;max-width:52ch;}
+  .stack .item{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .stack .item .name{font-weight:700;}
+  .stack .item .tag{
+    font-size:0.72rem;color:var(--text-sub);
+    padding:2px 8px;border:1px solid var(--line);border-radius:999px;
+  }
+
+  .arch{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;
+  }
+  .arch .node{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:14px 18px;font-size:0.9rem;text-align:center;min-width:140px;
+  }
+  .arch .arrow{color:var(--text-sub);font-size:1.3rem;}
+
+  .link-card{
+    display:block;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 20px;
+    text-decoration:none;
+    color:var(--text);
+    margin-bottom:14px;
+    max-width:60ch;
+  }
+  .link-card .ltag{color:var(--amber);font-size:0.72rem;margin-bottom:6px;}
+  .link-card .lurl{color:var(--blue);font-size:0.85rem;word-break:break-all;}
+
+  footer.slide-footer{
+    position:absolute;bottom:5vh;left:9vw;
+    color:var(--text-sub);font-size:0.75rem;
+  }
+  .page-num{
+    position:absolute;bottom:5vh;right:9vw;
+    color:var(--text-sub);font-size:0.78rem;
+  }
+
+  /* nav */
+  .nav{
+    position:absolute;
+    bottom:3.2vh;left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    align-items:center;
+    gap:16px;
+    z-index:10;
+  }
+  .nav button{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    width:36px;height:36px;
+    border-radius:50%;
+    cursor:pointer;
+    font-size:1rem;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .nav button:hover{border-color:var(--blue);color:var(--blue);}
+  .dots{display:flex;gap:7px;}
+  .dots .d{
+    width:6px;height:6px;border-radius:50%;background:var(--line);cursor:pointer;
+  }
+  .dots .d.active{background:var(--amber);}
+
+  @media (max-width: 640px){
+    .slide{padding:8vh 6vw;}
+    .cols{gap:24px;}
+    .readout{gap:14px;}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1 -->
+  <section class="slide title-slide active">
+    <div class="kicker">โปรเจกต์เว็บแอป · แดชบอร์ดโรงงาน</div>
+    <h1>เว็บเช็คสถานะเครื่องจักรแบบเรียลไทม์</h1>
+    <p class="lead">เครื่องมือติดตามสถานะเครื่องจักรในโรงงานผ่านเบราว์เซอร์ ดูภาพรวมได้ในหน้าเดียว ไม่ต้องเดินไปดูหน้างานทีละจุด</p>
+    <div class="readout">
+      <div class="box running"><div class="val">4/4</div><div class="lab">เครื่องจักรที่ติดตาม</div></div>
+      <div class="box"><div class="val mono">~2s</div><div class="lab">รอบอัปเดตข้อมูล</div></div>
+      <div class="box"><div class="val">100%</div><div class="lab">ทำงานผ่านเบราว์เซอร์</div></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="kicker">ที่มาของปัญหา</div>
+    <h2>เดิมทีการดูสถานะเครื่องจักรกระจัดกระจาย</h2>
+    <div class="cols">
+      <div class="col">
+        <p class="lead">ทีมงานต้องเดินสำรวจแต่ละจุด หรือถามกันผ่านไลน์ ทำให้รู้ปัญหาช้า และไม่มีที่เดียวที่สรุปภาพรวมทั้งโรงงาน</p>
+      </div>
+      <div class="col">
+        <div class="stack">
+          <div class="item"><span class="name">ไม่มีจุดศูนย์กลาง</span><span class="tag">ข้อมูลกระจาย</span></div>
+          <div class="item"><span class="name">รู้ปัญหาช้า</span><span class="tag">ตรวจด้วยตา</span></div>
+          <div class="item"><span class="name">ไม่มีประวัติย้อนหลัง</span><span class="tag">จำจากปากเปล่า</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="kicker">ฟีเจอร์หลัก</div>
+    <h2>ดูสถานะ แก้ไข และติดตามได้ในหน้าเดียว</h2>
+    <div class="cols">
+      <ul class="feature-list">
+        <li><span class="dot"></span><div><b>สรุปภาพรวม</b><br><span class="sub">นับจำนวนเครื่องจักรแยกตามสถานะทันที</span></div></li>
+        <li><span class="dot"></span><div><b>กรองตามสถานะ</b><br><span class="sub">ทำงานปกติ / หยุด / ซ่อมบำรุง / ขัดข้อง</span></div></li>
+        <li><span class="dot"></span><div><b>เพิ่ม แก้ไข ลบเครื่องจักร</b><br><span class="sub">จัดการรายการได้เองโดยไม่ต้องเขียนโค้ด</span></div></li>
+        <li><span class="dot"></span><div><b>อัปเดตแบบเรียลไทม์</b><br><span class="sub">ตัวเลขและสถานะขยับสดทุก ~2 วินาที</span></div></li>
+      </ul>
+      <div class="mock">
+        <div class="mtitle">ตัวอย่างหน้าจอ</div>
+        <div class="mrow"><span class="mname">CNC-01</span><span class="mstatus on">ทำงานปกติ</span></div>
+        <div class="mrow"><span class="mname">Conveyor-02</span><span class="mstatus on">ทำงานปกติ</span></div>
+        <div class="mrow"><span class="mname">Press-03</span><span class="mstatus warn">ซ่อมบำรุง</span></div>
+        <div class="mrow"><span class="mname">Robot-Arm-04</span><span class="mstatus err">ขัดข้อง</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="kicker">การจำลองข้อมูลเรียลไทม์</div>
+    <h2>สาธิตด้วยข้อมูลจำลอง ก่อนต่อเซนเซอร์จริง</h2>
+    <p class="lead" style="margin-bottom:26px;">ในเวอร์ชันปัจจุบัน อุณหภูมิและความเร็วของแต่ละเครื่องจะขยับขึ้นลงเองทุก ~2 วินาที และมีโอกาสสุ่มแจ้งเตือนขัดข้อง เพื่อให้เห็นภาพว่าระบบจริงจะทำงานอย่างไร</p>
+    <div class="cols">
+      <div class="col">
+        <div class="stack">
+          <div class="item"><span class="name">🌡 อุณหภูมิ</span><span class="tag mono">20–95 °C</span></div>
+          <div class="item"><span class="name">⚙️ ความเร็วการทำงาน</span><span class="tag mono">0–100 %</span></div>
+          <div class="item"><span class="name">⚠️ แจ้งเตือนขัดข้อง</span><span class="tag mono">สุ่ม ~1.5%/รอบ</span></div>
+        </div>
+      </div>
+      <div class="col">
+        <p class="lead">จุดไฟกระพริบสีเขียวที่หัวข้อ บอกว่าระบบกำลังอัปเดตสด และผู้ใช้กดหยุด/เล่นการอัปเดตได้เอง</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="kicker">เทคโนโลยีที่ใช้</div>
+    <h2>ไฟล์เดียว ไม่ต้องติดตั้งอะไรเพิ่ม</h2>
+    <div class="cols">
+      <div class="col">
+        <div class="stack">
+          <div class="item"><span class="name">HTML + CSS</span><span class="tag">โครงหน้าและดีไซน์</span></div>
+          <div class="item"><span class="name">JavaScript</span><span class="tag">ตรรกะและการจำลองข้อมูล</span></div>
+          <div class="item"><span class="name">localStorage</span><span class="tag">บันทึกข้อมูลในเบราว์เซอร์</span></div>
+        </div>
+      </div>
+      <div class="col">
+        <p class="lead">เปิดได้ทันทีด้วยเบราว์เซอร์ทั่วไป หรือแก้ไขต่อได้ใน VS Code เพราะเป็นโค้ดที่อ่านและแก้ได้ตรงไปตรงมา ไม่มีขั้นตอนบิลด์</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="kicker">แผนพัฒนาต่อ</div>
+    <h2>ก้าวต่อไป: เชื่อมข้อมูลจากเครื่องจักรจริง</h2>
+    <div class="arch">
+      <div class="node">เซนเซอร์ / PLC</div>
+      <div class="arrow">→</div>
+      <div class="node">API หรือฐานข้อมูลกลาง</div>
+      <div class="arrow">→</div>
+      <div class="node">เว็บแดชบอร์ด</div>
+      <div class="arrow">→</div>
+      <div class="node">ทีมงานทุกคนเห็นพร้อมกัน</div>
+    </div>
+    <p class="lead" style="margin-top:28px;">เมื่อมีระบบเซนเซอร์จริงพร้อมส่งข้อมูล ส่วนจำลองในหน้านี้จะถูกแทนที่ด้วยข้อมูลจากอุปกรณ์จริงโดยไม่ต้องเปลี่ยนหน้าตาการใช้งาน</p>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="kicker">ลิงก์อ้างอิง</div>
+    <h2>ดูตัวอย่างจริงและแหล่งอ้างอิง</h2>
+    <a class="link-card" href="https://machine-status-rosy.vercel.app" rel="noopener">
+      <div class="ltag">DEMO ใช้งานได้จริง</div>
+      <div class="lurl">machine-status.html</div>
+    </a>
+    <a class="link-card" href="https://apps.mooc2.aiat.or.th/learning/course/course-v1:AIAT+NLP2015+2023/home" target="_blank" rel="noopener">
+      <div class="ltag">แหล่งอ้างอิงที่เกี่ยวข้อง</div>
+      <div class="lurl">apps.mooc2.aiat.or.th — บทเรียน AIAT NLP2015 (2023)</div>
+    </a>
+    <a class="link-card" href="https://apps.mooc2.aiat.or.th/learning/course/course-v1:AIAT+PAT1018+2024/home" target="_blank" rel="noopener">
+      <div class="ltag">แหล่งอ้างอิงที่เกี่ยวข้อง</div>
+      <div class="lurl">apps.mooc2.aiat.or.th — บทเรียน AIAT • PAT1018 (2024)</div>
+    </a>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="prevBtn" aria-label="ก่อนหน้า">‹</button>
+  <div class="dots" id="dots"></div>
+  <button id="nextBtn" aria-label="ถัดไป">›</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotsWrap = document.getElementById('dots');
+  let idx = 0;
+
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'd' + (i===0 ? ' active' : '');
+    d.addEventListener('click', () => go(i));
+    dotsWrap.appendChild(d);
+  });
+  const dots = dotsWrap.querySelectorAll('.d');
+
+  function go(i){
+    if(i < 0 || i >= slides.length) return;
+    slides[idx].classList.remove('active');
+    dots[idx].classList.remove('active');
+    idx = i;
+    slides[idx].classList.add('active');
+    dots[idx].classList.add('active');
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => go(idx-1));
+  document.getElementById('nextBtn').addEventListener('click', () => go(idx+1));
+
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'ArrowRight' || e.key === ' ') go(idx+1);
+    if(e.key === 'ArrowLeft') go(idx-1);
+  });
+
+  let touchStartX = 0;
+  window.addEventListener('touchstart', e => touchStartX = e.touches[0].clientX);
+  window.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if(dx > 50) go(idx-1);
+    if(dx < -50) go(idx+1);
+  });
+</script>
+</body>
+</html>
